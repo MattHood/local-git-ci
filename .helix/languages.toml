@@ -1,0 +1,3 @@
+[[language]]
+name = "ruby"
+language-servers = ["bundle-standardrb"]
