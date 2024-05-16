@@ -75,6 +75,7 @@ namespace :ci do
   end
 
   task :check do
+    debugger
     checks = %w[standardrb rspec]
     results = checks.map do |check|
       note = `git notes --ref 'ref/notes/devtools/ci/#{check}' show`

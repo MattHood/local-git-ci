@@ -31,7 +31,7 @@ jobs:
       with:
         ruby-version: "3.2.2"
         bundler-cache: true # runs 'bundle install' and caches installed gems automatically
-    - name: Check refs
+    - name: Check refs for notes
       run: ls -R .git/refs
     - name: Run tests
       run: bundle exec rake ci:check
