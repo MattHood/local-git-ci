@@ -1,1 +1,1 @@
-{"hostname":"n51116.local\n","is_success":true,"checked_units":3}
+{"command":"bundle exec standardrb --format json","hostname":"n51116.local\n","is_success":true,"checked_units":3}
