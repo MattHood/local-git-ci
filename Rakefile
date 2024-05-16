@@ -2,12 +2,32 @@ require "standard/rake"
 require "json"
 require "fileutils"
 
-def working_tree_clean? = `git status --porcelain`.strip.empty?
-
 namespace :ci do
   task :default do
     Rake::Task["ci:lint"].invoke
     Rake::Task["ci:test"].invoke
+  end
+
+  def working_tree_clean? = `git status --porcelain`.strip.empty?
+
+  def ci_task(name:, command:, success_path:, checked_units_path:)
+    return if ENV["SKIP_CI"]
+    puts "Running :#{name}..."
+    unless working_tree_clean?
+      abort "Aborting :#{name} - Working tree must be clean"
+    end
+    output = `#{command}`
+    parsed = JSON.parse(output)
+    results = {
+      command:,
+      hostname: `hostname`,
+      is_success: parsed.dig(*success_path) == 0,
+      checked_units: parsed.dig(*checked_units_path)
+    }
+    `git notes --ref 'ref/notes/devtools/ci/#{name}' add --force -m '#{JSON.generate(results)}'`
+    unless results[:is_success]
+      abort ":#{name} failed, aborting"
+    end
   end
 
   task :lint do
