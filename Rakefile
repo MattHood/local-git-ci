@@ -1,7 +1,8 @@
 require "standard/rake"
 require "json"
-require "debug"
 require "fileutils"
+
+def working_tree_clean? = `git status --porcelain`.strip.empty?
 
 namespace :ci do
   task :default do
@@ -10,7 +11,13 @@ namespace :ci do
   end
 
   task :lint do
+    if ENV["SKIP_CI"]
+      next
+    end
     puts "Running :lint..."
+    unless working_tree_clean?
+      abort "Aborting :lint - Working tree must be clean"
+    end
     output = `bundle exec standardrb --format json`
     parsed = JSON.parse(output)
     results = {
@@ -20,10 +27,19 @@ namespace :ci do
       checked_units: parsed.dig("summary", "inspected_file_count")
     }
     `git notes --ref 'ref/notes/devtools/ci/standardrb' add --force -m '#{JSON.generate(results)}'`
+    unless results[:is_success]
+      abort ":lint failed, aborting"
+    end
   end
 
   task :test do
+    if ENV["SKIP_CI"]
+      next
+    end
     puts "Running :test..."
+    unless working_tree_clean?
+      abort "Aborting :test - Working tree must be clean"
+    end
     output = `bundle exec rspec --format json`
     parsed = JSON.parse(output)
     results = {
@@ -33,6 +49,9 @@ namespace :ci do
       checked_units: parsed.dig("summary", "example_count")
     }
     `git notes --ref 'ref/notes/devtools/ci/rspec' add --force -m '#{JSON.generate(results)}'`
+    unless results[:is_success]
+      abort ":test failed, aborting"
+    end
   end
 
   task :check do
@@ -69,11 +88,11 @@ namespace :git do
 
   task :pre_commit do
     puts "Running :pre_commit"
-    Rake::Task["ci:lint"].invoke
   end
 
   task :pre_push do
     puts "Running :pre_push"
+    Rake::Task["ci:lint"].invoke
     Rake::Task["ci:test"].invoke
     Rake::Task["ci:check"].invoke
   end
