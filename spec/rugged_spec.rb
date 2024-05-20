@@ -1,6 +1,5 @@
 require "rspec"
 require "rugged"
-require "debug"
 
 RSpec.describe "usage of rugged" do
   let(:repo) { Rugged::Repository.new(".") }

@@ -2,90 +2,66 @@ require "standard/rake"
 require "json"
 require "fileutils"
 
+class CITask < Rake::Task
+  def needed?
+    if ENV["SKIP_CI"] || ENV["SKIP_#{short_name.upcase}"]
+      false
+    else
+      show_note
+      $?.exitstatus != 0
+    end
+  end
+
+  def call(command)
+    puts "Running #{name}..."
+
+    result = system(command)
+    summary = {
+      command:,
+      hostname: `hostname`,
+      is_success: result
+    }
+
+    store_note name, JSON.generate(summary) if working_tree_clean?
+    abort "#{name} failed, aborting" unless summary[:is_success]
+  end
+
+  private
+
+  def working_tree_clean? = `git status --porcelain`.strip.empty?
+
+  def store_note(data)
+    `git notes --ref 'ref/notes/devtools/ci/#{short_name}' add --force -m '#{data}'`
+  end
+
+  def show_note = `git notes --ref 'ref/notes/devtools/ci/#{short_name}' show 2> /dev/null`
+
+  def short_name = name.split(":").last
+
+  class << self
+    def define_task(name:, command:)
+      super(name) do |ci_task|
+        ci_task.call command
+      end
+    end
+  end
+end
+
 namespace :ci do
   task :default do
     Rake::Task["ci:lint"].invoke
     Rake::Task["ci:test"].invoke
   end
 
-  def working_tree_clean? = `git status --porcelain`.strip.empty?
+  CITask.define_task(
+    name: :lint,
+    command: "bundle exec standardrb"
+  )
 
-  def ci_task(name:, command:, success_path:, checked_units_path:)
-    return if ENV["SKIP_CI"]
-    puts "Running :#{name}..."
-    unless working_tree_clean?
-      abort "Aborting :#{name} - Working tree must be clean"
-    end
-    output = `#{command}`
-    parsed = JSON.parse(output)
-    results = {
-      command:,
-      hostname: `hostname`,
-      is_success: parsed.dig(*success_path) == 0,
-      checked_units: parsed.dig(*checked_units_path)
-    }
-    `git notes --ref 'ref/notes/devtools/ci/#{name}' add --force -m '#{JSON.generate(results)}'`
-    unless results[:is_success]
-      abort ":#{name} failed, aborting"
-    end
-  end
-
-  task :lint do
-    if ENV["SKIP_CI"]
-      next
-    end
-    puts "Running :lint..."
-    unless working_tree_clean?
-      abort "Aborting :lint - Working tree must be clean"
-    end
-    output = `bundle exec standardrb --format json`
-    parsed = JSON.parse(output)
-    results = {
-      command: "bundle exec standardrb --format json",
-      hostname: `hostname`,
-      is_success: parsed.dig("summary", "offense_count") == 0,
-      checked_units: parsed.dig("summary", "inspected_file_count")
-    }
-    `git notes --ref 'ref/notes/devtools/ci/standardrb' add --force -m '#{JSON.generate(results)}'`
-    unless results[:is_success]
-      abort ":lint failed, aborting"
-    end
-  end
-
-  task :test do
-    if ENV["SKIP_CI"]
-      next
-    end
-    puts "Running :test..."
-    unless working_tree_clean?
-      abort "Aborting :test - Working tree must be clean"
-    end
-    output = `bundle exec rspec --format json`
-    parsed = JSON.parse(output)
-    results = {
-      command: "bundle exec rspec --format json",
-      hostname: `hostname`,
-      is_success: parsed.dig("summary", "failure_count") == 0,
-      checked_units: parsed.dig("summary", "example_count")
-    }
-    `git notes --ref 'ref/notes/devtools/ci/rspec' add --force -m '#{JSON.generate(results)}'`
-    unless results[:is_success]
-      abort ":test failed, aborting"
-    end
-  end
-
-  task :check do
-    debugger
-    checks = %w[standardrb rspec]
-    results = checks.map do |check|
-      note = `git notes --ref 'ref/notes/devtools/ci/#{check}' show`
-      JSON.parse(note)
-    end
-    failures = results.select { _1["is_success"] == false }
-    unless failures.empty?
-      abort "CI checks failed: #{failures.join(", ")}"
-    end
-  end
+  CITask.define_task(
+    name: :test,
+    command: "bundle exec rspec"
+  )
 end
 
 GIT_HOOKS = %w[
@@ -115,6 +91,5 @@ namespace :git do
     puts "Running :pre_push"
     Rake::Task["ci:lint"].invoke
     Rake::Task["ci:test"].invoke
-    Rake::Task["ci:check"].invoke
   end
 end
