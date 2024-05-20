@@ -22,7 +22,7 @@ class CITask < Rake::Task
       is_success: result
     }
 
-    store_note name, JSON.generate(summary) if working_tree_clean?
+    store_note JSON.generate(summary) if working_tree_clean?
     abort "#{name} failed, aborting" unless summary[:is_success]
   end
 
